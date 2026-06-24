@@ -49,6 +49,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Detect Technology Stack
         id: detect
@@ -95,6 +97,13 @@ jobs:
           # Send project snapshot to Snyk dashboard for active monitoring
           snyk monitor --all-projects || true
 
+      - name: Run GitGuardian Scan
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+        run: |
+          pip install --root-user-action=ignore ggshield
+          ggshield secret scan ci --json > gitguardian.json || true
+
       - name: Resolve and Execute Parsing Script
         env:
           CMDB_METADATA: ${{ needs.retrieve-metadata.outputs.app_metadata }}
@@ -109,4 +118,4 @@ jobs:
           fi
           
           # Execute the Python parser script to generate step summary and enforce policy gates
-          python3 scripts/parse-results.py snyk-sca.json snyk-sast.json "${{ inputs.fail_on_severity }}" "$CMDB_METADATA"
+          python3 scripts/parse-results.py snyk-sca.json snyk-sast.json gitguardian.json "${{ inputs.fail_on_severity }}" "$CMDB_METADATA"

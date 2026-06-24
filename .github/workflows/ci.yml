@@ -232,4 +232,80 @@ jobs:
     with:
       language: ${{ needs.detect.outputs.language }}
     secrets: inherit
+
+  build-image:
+    needs: [detect, build, security-scan]
+    if: |
+      always() &&
+      needs.detect.result == 'success' &&
+      needs.build.result == 'success' &&
+      needs.security-scan.result != 'cancelled'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        language: ${{ fromJson(needs.detect.outputs.languages) }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Built Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.language }}-artifact
+          path: ./artifacts
+
+      - name: Login to Artifactory
+        run: |
+          echo "${{ secrets.JFROG_PASSWORD }}" | docker login trial2zs76n.jfrog.io \
+            -u "${{ secrets.JFROG_USERNAME }}" \
+            --password-stdin
+
+      - name: Generate Dockerfile and Build Image
+        run: |
+          IMAGE_NAME="trial2zs76n.jfrog.io/docker-local/${{ github.event.repository.name }}-${{ matrix.language }}:${{ github.run_number }}"
+          
+          if [ "${{ matrix.language }}" = "java" ]; then
+            mkdir -p target
+            cp ./artifacts/*.jar ./target/
+            cat << 'EOF' > Dockerfile
+          FROM eclipse-temurin:21-jre-alpine
+          WORKDIR /app
+          COPY target/*.jar app.jar
+          EXPOSE 8080
+          ENTRYPOINT ["java", "-jar", "app.jar"]
+          EOF
+          elif [ "${{ matrix.language }}" = "python" ]; then
+            mkdir -p dist
+            cp -r ./artifacts/* ./dist/
+            cat << 'EOF' > Dockerfile
+          FROM python:3.12-slim
+          WORKDIR /app
+          COPY dist/ .
+          RUN pip install --no-cache-dir ./*.whl
+          EXPOSE 8080
+          ENTRYPOINT ["python", "-m", "app"]
+          EOF
+          elif [ "${{ matrix.language }}" = "go" ]; then
+            mkdir -p dist
+            cp -r ./artifacts/* ./dist/
+            cat << 'EOF' > Dockerfile
+          FROM alpine:latest
+          WORKDIR /app
+          COPY dist/app .
+          EXPOSE 8080
+          ENTRYPOINT ["./app"]
+          EOF
+          elif [ "${{ matrix.language }}" = "dotnet" ]; then
+            mkdir -p dist
+            cp -r ./artifacts/* ./dist/
+            cat << 'EOF' > Dockerfile
+          FROM mcr.microsoft.com/dotnet/aspnet:8.0
+          WORKDIR /app
+          COPY dist/ .
+          ENTRYPOINT ["dotnet", "Org.Springframework.Samples.Petclinic.dll"]
+          EOF
+          fi
+          
+          docker build -t "$IMAGE_NAME" .
+          docker push "$IMAGE_NAME"
     

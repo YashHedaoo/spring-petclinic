@@ -219,6 +219,7 @@ jobs:
     secrets:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       CMDB_API_KEY: ${{ secrets.CMDB_API_KEY }}
+      GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
 
   publish:
     needs: [detect, security-scan]

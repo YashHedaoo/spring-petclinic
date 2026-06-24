@@ -20,6 +20,9 @@ on:
       CMDB_API_KEY:
         description: 'API Key for CMDB queries'
         required: false
+      GITGUARDIAN_API_KEY:
+        description: 'API Key for GitGuardian'
+        required: false
 
 jobs:
   retrieve-metadata:

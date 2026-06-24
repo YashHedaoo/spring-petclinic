@@ -40,3 +40,5 @@ jobs:
           name: sca-results-${{ inputs.language }}
           path: snyk-sca.json
           retention-days: 1
+
+          

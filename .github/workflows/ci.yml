@@ -227,119 +227,85 @@ jobs:
           path: dist/
           retention-days: 1
 
-  security-scan:
+  security-sca:
     needs: [detect, build]
     if: |
       always() &&
       needs.detect.result == 'success' &&
       needs.build.result == 'success'
-    uses: ./.github/workflows/security.yml
+    strategy:
+      matrix:
+        language: ${{ fromJson(needs.detect.outputs.languages) }}
+    uses: ./.github/workflows/sca-scan.yml
     with:
-      fail_on_severity: 'high'
+      language: ${{ matrix.language }}
     secrets:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      CMDB_API_KEY: ${{ secrets.CMDB_API_KEY }}
-      GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
 
-  publish:
-    needs: [detect, security-scan]
+  security-sast:
+    needs: [detect, build]
     if: |
       always() &&
       needs.detect.result == 'success' &&
-      needs.security-scan.result == 'success' &&
+      needs.build.result == 'success'
+    uses: ./.github/workflows/sast-scan.yml
+    secrets:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  security-secrets:
+    needs: [detect, build]
+    if: |
+      always() &&
+      needs.detect.result == 'success' &&
+      needs.build.result == 'success'
+    uses: ./.github/workflows/secrets-scan.yml
+    secrets:
+      GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+
+  security-gatekeeper:
+    needs: [detect, security-sca, security-sast, security-secrets]
+    if: |
+      always() &&
+      needs.detect.result == 'success' &&
+      needs.security-sca.result == 'success' &&
+      needs.security-sast.result == 'success' &&
+      needs.security-secrets.result == 'success'
+    strategy:
+      matrix:
+        language: ${{ fromJson(needs.detect.outputs.languages) }}
+    uses: ./.github/workflows/gatekeeper.yml
+    with:
+      language: ${{ matrix.language }}
+      fail_on_severity: 'high'
+    secrets:
+      CMDB_API_KEY: ${{ secrets.CMDB_API_KEY }}
+
+  publish:
+    needs: [detect, security-gatekeeper]
+    if: |
+      always() &&
+      needs.detect.result == 'success' &&
+      needs.security-gatekeeper.result == 'success' &&
       startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/publish.yml
     with:
       language: ${{ needs.detect.outputs.language }}
     secrets: inherit
 
-  build-image:
-    needs: [detect, build, security-scan]
+  docker-delivery:
+    needs: [detect, build, security-gatekeeper]
     if: |
       always() &&
       needs.detect.result == 'success' &&
       needs.build.result == 'success' &&
-      needs.security-scan.result != 'cancelled'
-    runs-on: ubuntu-latest
+      needs.security-gatekeeper.result == 'success'
     strategy:
       matrix:
         language: ${{ fromJson(needs.detect.outputs.languages) }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Download Built Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.language }}-artifact
-          path: ./artifacts
-
-      - name: Login to Docker Hub
-        run: |
-          echo "=== Authenticating with Docker Hub ==="
-          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-          echo "[SUCCESS] Authenticated successfully with Docker Hub."
-
-      - name: Generate Dockerfile and Build Image
-        run: |
-          echo "=== Initializing Docker Build for Target: ${{ matrix.language }} ==="
-          IMAGE_NAME="yashhedaoof5/sp"
-          echo "[INFO] Docker image tags will be: ${IMAGE_NAME}:v1 and ${IMAGE_NAME}:latest"
-          
-          if [ "${{ matrix.language }}" = "java" ]; then
-            echo "[INFO] Copying Java build JAR into context..."
-            mkdir -p target
-            cp ./artifacts/*.jar ./target/
-            echo "[INFO] Generating Java runtime Dockerfile..."
-            cat << 'EOF' > Dockerfile
-          FROM eclipse-temurin:21-jre-alpine
-          WORKDIR /app
-          COPY target/*.jar app.jar
-          EXPOSE 8080
-          ENTRYPOINT ["java", "-jar", "app.jar"]
-          EOF
-          elif [ "${{ matrix.language }}" = "python" ]; then
-            echo "[INFO] Copying Python wheels into context..."
-            mkdir -p dist
-            cp -r ./artifacts/* ./dist/
-            echo "[INFO] Generating Python runtime Dockerfile..."
-            cat << 'EOF' > Dockerfile
-          FROM python:3.12-slim
-          WORKDIR /app
-          COPY dist/ .
-          RUN pip install --no-cache-dir ./*.whl
-          EXPOSE 8080
-          ENTRYPOINT ["python", "-m", "app"]
-          EOF
-          elif [ "${{ matrix.language }}" = "go" ]; then
-            echo "[INFO] Copying Go executable binary into context..."
-            mkdir -p dist
-            cp -r ./artifacts/* ./dist/
-            echo "[INFO] Generating Go runtime Dockerfile..."
-            cat << 'EOF' > Dockerfile
-          FROM alpine:latest
-          WORKDIR /app
-          COPY dist/app .
-          EXPOSE 8080
-          ENTRYPOINT ["./app"]
-          EOF
-          elif [ "${{ matrix.language }}" = "dotnet" ]; then
-            echo "[INFO] Copying .NET release files into context..."
-            mkdir -p dist
-            cp -r ./artifacts/* ./dist/
-            echo "[INFO] Generating .NET runtime Dockerfile..."
-            cat << 'EOF' > Dockerfile
-          FROM mcr.microsoft.com/dotnet/aspnet:8.0
-          WORKDIR /app
-          COPY dist/ .
-          ENTRYPOINT ["dotnet", "Org.Springframework.Samples.Petclinic.dll"]
-          EOF
-          fi
-          
-          echo "[INFO] Launching Docker build process..."
-          docker build -t "${IMAGE_NAME}:v1" -t "${IMAGE_NAME}:latest" .
-          echo "[SUCCESS] Image built successfully. Commencing push to Docker Hub..."
-          docker push "${IMAGE_NAME}:v1"
-          docker push "${IMAGE_NAME}:latest"
-          echo "[SUCCESS] Docker images pushed successfully to Docker Hub: ${IMAGE_NAME}:v1 and ${IMAGE_NAME}:latest"
+    uses: ./.github/workflows/docker-delivery.yml
+    with:
+      language: ${{ matrix.language }}
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
     

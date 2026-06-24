@@ -1,0 +1,42 @@
+name: SCA Scan
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+    secrets:
+      SNYK_TOKEN:
+        required: true
+
+jobs:
+  sca-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Snyk CLI
+        uses: snyk/actions/setup@master
+
+      - name: Run Snyk SCA Scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          echo "=== Starting Snyk SCA Scan (Open Source Dependency Vulnerabilities) ==="
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "[WARNING] SNYK_TOKEN is not configured. Running mock/empty SCA report..."
+            echo "{}" > snyk-sca.json
+          else
+            echo "[INFO] Running snyk test command..."
+            snyk test --all-projects --json > snyk-sca.json || true
+            echo "[SUCCESS] Snyk SCA scan complete. Results saved to snyk-sca.json"
+          fi
+
+      - name: Upload SCA Scan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-results-${{ inputs.language }}
+          path: snyk-sca.json
+          retention-days: 1

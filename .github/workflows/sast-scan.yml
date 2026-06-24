@@ -1,0 +1,38 @@
+name: SAST Scan
+
+on:
+  workflow_call:
+    secrets:
+      SNYK_TOKEN:
+        required: true
+
+jobs:
+  sast-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Snyk CLI
+        uses: snyk/actions/setup@master
+
+      - name: Run Snyk SAST Scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          echo "=== Starting Snyk SAST Scan (Static Application Code Vulnerabilities) ==="
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "[WARNING] SNYK_TOKEN is not configured. Running mock/empty SAST report..."
+            echo "{}" > snyk-sast.json
+          else
+            echo "[INFO] Running snyk code test command..."
+            snyk code test --json > snyk-sast.json || true
+            echo "[SUCCESS] Snyk SAST scan complete. Results saved to snyk-sast.json"
+          fi
+
+      - name: Upload SAST Scan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-results
+          path: snyk-sast.json
+          retention-days: 1

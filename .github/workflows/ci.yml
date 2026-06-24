@@ -26,7 +26,9 @@ jobs:
         uses: actions/checkout@v4
       - name: Detect Project Type
         id: detect
-        run: bash scripts/detect.sh
+        run: |
+          echo "=== Launching Project Type Auto-Detection ==="
+          bash scripts/detect.sh
 
   build:
     needs: detect
@@ -40,9 +42,11 @@ jobs:
 
       - name: Login to Artifactory
         run: |
+          echo "=== Authenticating with JFrog Artifactory Registry (trial2zs76n.jfrog.io) ==="
           echo "${{ secrets.JFROG_PASSWORD }}" | docker login trial2zs76n.jfrog.io \
             -u "${{ secrets.JFROG_USERNAME }}" \
             --password-stdin
+          echo "[SUCCESS] Successfully authenticated."
 
       # JAVA BUILD STEPS
       - name: Create Authenticated Maven settings.xml
@@ -100,6 +104,8 @@ jobs:
       - name: Run Build in Java Container
         if: matrix.language == 'java'
         run: |
+          echo "=== Executing Java Maven Package Build inside Docker ==="
+          echo "[INFO] Using Eclipse Temurin 21 Builder Image."
           docker run --rm \
             --entrypoint "" \
             -e JFROG_USERNAME="${{ secrets.JFROG_USERNAME }}" \
@@ -109,6 +115,7 @@ jobs:
             -w /workspace \
             trial2zs76n.jfrog.io/docker-local/java-builder:1.0 \
             mvn clean package -U -DskipTests
+          echo "[SUCCESS] Maven build successful."
 
       - name: Upload Java Artifact
         if: matrix.language == 'java'
@@ -122,15 +129,19 @@ jobs:
       - name: Create Authenticated pip.conf
         if: matrix.language == 'python'
         run: |
+          echo "=== Generating Authenticated pip.conf for PyPI ==="
           mkdir -p .github/pip
           cat << EOF > .github/pip/pip.conf
           [global]
           index-url=https://${{ secrets.JFROG_USERNAME }}:${{ secrets.JFROG_PASSWORD }}@trial2zs76n.jfrog.io/artifactory/api/pypi/pypi/simple
           EOF
+          echo "[SUCCESS] pip.conf written to .github/pip/pip.conf"
 
       - name: Run Build in Python Container
         if: matrix.language == 'python'
         run: |
+          echo "=== Executing Python Package Build inside Docker ==="
+          echo "[INFO] Using Python 3.12 Builder Image."
           docker run --rm \
             --entrypoint "" \
             -v ${{ github.workspace }}:/workspace \
@@ -138,6 +149,7 @@ jobs:
             -w /workspace \
             trial2zs76n.jfrog.io/docker-local/python-builder:1.0 \
             bash -c "if [ -f requirements.txt ]; then pip install --root-user-action=ignore -r requirements.txt; fi && python -m build"
+          echo "[SUCCESS] Python build complete."
 
       - name: Upload Python Artifact
         if: matrix.language == 'python'
@@ -151,6 +163,8 @@ jobs:
       - name: Run Build in Go Container
         if: matrix.language == 'go'
         run: |
+          echo "=== Executing Go Compilation inside Docker ==="
+          echo "[INFO] Using Go 1.24 Builder Image with Artifactory Go Proxy."
           docker run --rm \
             --entrypoint "" \
             -e GOPROXY="https://${{ secrets.JFROG_USERNAME }}:${{ secrets.JFROG_PASSWORD }}@trial2zs76n.jfrog.io/artifactory/api/go/go-virtual" \
@@ -158,6 +172,7 @@ jobs:
             -w /workspace \
             trial2zs76n.jfrog.io/docker-local/go-builder:1.0 \
             bash -c "go mod download && mkdir -p dist && go build -o dist/app ."
+          echo "[SUCCESS] Go compilation complete."
 
       - name: Upload Go Artifact
         if: matrix.language == 'go'
@@ -171,6 +186,7 @@ jobs:
       - name: Create Authenticated nuget.config
         if: matrix.language == 'dotnet'
         run: |
+          echo "=== Generating Authenticated nuget.config for NuGet ==="
           mkdir -p .github/nuget
           cat << EOF > .github/nuget/nuget.config
           <?xml version="1.0" encoding="utf-8"?>
@@ -187,10 +203,13 @@ jobs:
             </packageSourceCredentials>
           </configuration>
           EOF
+          echo "[SUCCESS] nuget.config written to .github/nuget/nuget.config"
 
       - name: Run Build in Dotnet Container
         if: matrix.language == 'dotnet'
         run: |
+          echo "=== Executing .NET Release Build inside Docker ==="
+          echo "[INFO] Using .NET 8.0 SDK Builder Image."
           docker run --rm \
             --entrypoint "" \
             -v ${{ github.workspace }}:/workspace \
@@ -198,6 +217,7 @@ jobs:
             -w /workspace \
             trial2zs76n.jfrog.io/docker-local/dotnet-builder:1.0 \
             dotnet build -c Release -o dist
+          echo "[SUCCESS] .NET build complete."
 
       - name: Upload Dotnet Artifact
         if: matrix.language == 'dotnet'
@@ -256,17 +276,23 @@ jobs:
 
       - name: Login to Artifactory
         run: |
+          echo "=== Authenticating with JFrog Artifactory Registry (trial2zs76n.jfrog.io) ==="
           echo "${{ secrets.JFROG_PASSWORD }}" | docker login trial2zs76n.jfrog.io \
             -u "${{ secrets.JFROG_USERNAME }}" \
             --password-stdin
+          echo "[SUCCESS] Authenticated successfully."
 
       - name: Generate Dockerfile and Build Image
         run: |
+          echo "=== Initializing Docker Build for Target: ${{ matrix.language }} ==="
           IMAGE_NAME="trial2zs76n.jfrog.io/docker-local/${{ github.event.repository.name }}-${{ matrix.language }}:${{ github.run_number }}"
+          echo "[INFO] Docker image tag will be: $IMAGE_NAME"
           
           if [ "${{ matrix.language }}" = "java" ]; then
+            echo "[INFO] Copying Java build JAR into context..."
             mkdir -p target
             cp ./artifacts/*.jar ./target/
+            echo "[INFO] Generating Java runtime Dockerfile..."
             cat << 'EOF' > Dockerfile
           FROM eclipse-temurin:21-jre-alpine
           WORKDIR /app
@@ -275,8 +301,10 @@ jobs:
           ENTRYPOINT ["java", "-jar", "app.jar"]
           EOF
           elif [ "${{ matrix.language }}" = "python" ]; then
+            echo "[INFO] Copying Python wheels into context..."
             mkdir -p dist
             cp -r ./artifacts/* ./dist/
+            echo "[INFO] Generating Python runtime Dockerfile..."
             cat << 'EOF' > Dockerfile
           FROM python:3.12-slim
           WORKDIR /app
@@ -286,8 +314,10 @@ jobs:
           ENTRYPOINT ["python", "-m", "app"]
           EOF
           elif [ "${{ matrix.language }}" = "go" ]; then
+            echo "[INFO] Copying Go executable binary into context..."
             mkdir -p dist
             cp -r ./artifacts/* ./dist/
+            echo "[INFO] Generating Go runtime Dockerfile..."
             cat << 'EOF' > Dockerfile
           FROM alpine:latest
           WORKDIR /app
@@ -296,8 +326,10 @@ jobs:
           ENTRYPOINT ["./app"]
           EOF
           elif [ "${{ matrix.language }}" = "dotnet" ]; then
+            echo "[INFO] Copying .NET release files into context..."
             mkdir -p dist
             cp -r ./artifacts/* ./dist/
+            echo "[INFO] Generating .NET runtime Dockerfile..."
             cat << 'EOF' > Dockerfile
           FROM mcr.microsoft.com/dotnet/aspnet:8.0
           WORKDIR /app
@@ -306,6 +338,9 @@ jobs:
           EOF
           fi
           
+          echo "[INFO] Launching Docker build process..."
           docker build -t "$IMAGE_NAME" .
+          echo "[SUCCESS] Image built successfully. Commencing push to registry..."
           docker push "$IMAGE_NAME"
+          echo "[SUCCESS] Docker image pushed successfully to: $IMAGE_NAME"
     

@@ -119,7 +119,9 @@ def parse_gitguardian(file_path):
     return counts
 
 def main():
+    print("=== Starting Security Scan Results Parser ===")
     if len(sys.argv) < 5:
+        print("[ERROR] Insufficient arguments provided to parser.")
         print("Usage: parse-results.py <sca_json> <sast_json> <gitguardian_json> <fail_on_severity> [cmdb_metadata_json_str]")
         sys.exit(1)
         
@@ -128,17 +130,32 @@ def main():
     gitguardian_file = sys.argv[3]
     threshold_sev = sys.argv[4].lower()
     
+    print(f"[INFO] SCA Scan File: {sca_file}")
+    print(f"[INFO] SAST Scan File: {sast_file}")
+    print(f"[INFO] GitGuardian Scan File: {gitguardian_file}")
+    print(f"[INFO] Policy Gate Fail Severity Threshold: {threshold_sev.upper()}")
+    
     cmdb_metadata = {}
     if len(sys.argv) >= 6:
+        print("[INFO] Parsing CMDB metadata JSON parameter...")
         try:
             cmdb_metadata = json.loads(sys.argv[5])
+            print(f"[SUCCESS] CMDB metadata loaded: {cmdb_metadata}")
         except Exception as e:
-            print(f"Warning: Failed to parse CMDB metadata JSON string: {e}")
+            print(f"[WARNING] Failed to parse CMDB metadata JSON string: {e}")
 
     # Parse reports
+    print("[INFO] Parsing SCA (Dependencies) report...")
     sca_counts = parse_sca(sca_file)
+    print(f"[INFO] SCA counts found: {sca_counts}")
+    
+    print("[INFO] Parsing SAST (Static Code) report...")
     sast_counts = parse_sast(sast_file)
+    print(f"[INFO] SAST counts found: {sast_counts}")
+    
+    print("[INFO] Parsing Secrets (GitGuardian) report...")
     gitguardian_counts = parse_gitguardian(gitguardian_file)
+    print(f"[INFO] GitGuardian secrets counts found: {gitguardian_counts}")
     
     total_counts = {
         "low": sca_counts["low"] + sast_counts["low"] + gitguardian_counts["low"],
@@ -146,6 +163,7 @@ def main():
         "high": sca_counts["high"] + sast_counts["high"] + gitguardian_counts["high"],
         "critical": sca_counts["critical"] + sast_counts["critical"] + gitguardian_counts["critical"]
     }
+    print(f"[INFO] Combined findings total: {total_counts}")
     
     # Generate Markdown report
     md_content = []

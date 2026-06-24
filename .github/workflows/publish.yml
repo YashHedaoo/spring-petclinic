@@ -32,13 +32,14 @@ jobs:
         run: |
           REPO_NAME="${{ github.event.repository.name }}"
           RUN_NUM="${{ github.run_number }}"
-          
           if [ "${{ inputs.language }}" = "java" ]; then
             jf rt upload "downloaded-artifacts/*.jar" "java-artifacts/${REPO_NAME}/${RUN_NUM}/"
           elif [ "${{ inputs.language }}" = "python" ]; then
             jf rt upload "downloaded-artifacts/*" "python-artifacts/${REPO_NAME}/${RUN_NUM}/"
           elif [ "${{ inputs.language }}" = "go" ]; then
             jf rt upload "downloaded-artifacts/app" "go-artifacts/${REPO_NAME}/${RUN_NUM}/"
+          elif [ "${{ inputs.language }}" = "dotnet" ]; then
+            jf rt upload "downloaded-artifacts/*" "dotnet-artifacts/${REPO_NAME}/${RUN_NUM}/"
           else
             echo "Unsupported language: ${{ inputs.language }}"
             exit 1

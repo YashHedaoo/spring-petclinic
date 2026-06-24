@@ -62,6 +62,9 @@ jobs:
           elif [ -f go.mod ]; then
             echo "language=go" >> $GITHUB_OUTPUT
             echo "Tech stack detected: Go"
+          elif [ -n "$(find . -maxdepth 2 \( -name "*.sln" -o -name "*.csproj" \) -print -quit)" ]; then
+            echo "language=dotnet" >> $GITHUB_OUTPUT
+            echo "Tech stack detected: Dotnet"
           else
             echo "language=unknown" >> $GITHUB_OUTPUT
             echo "Unsupported technology stack."

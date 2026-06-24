@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       language: ${{ steps.detect.outputs.language }}
+      languages: ${{ steps.detect.outputs.languages }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,10 +22,12 @@ jobs:
         id: detect
         run: bash scripts/detect.sh
 
-  build-java:
+  build:
     needs: detect
-    if: needs.detect.outputs.language == 'java'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        language: ${{ fromJson(needs.detect.outputs.languages) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,7 +38,9 @@ jobs:
             -u "${{ secrets.JFROG_USERNAME }}" \
             --password-stdin
 
+      # JAVA BUILD STEPS
       - name: Create Authenticated Maven settings.xml
+        if: matrix.language == 'java'
         run: |
           mkdir -p .github/maven
           cat << 'EOF' > .github/maven/settings.xml
@@ -86,7 +91,8 @@ jobs:
           </settings>
           EOF
 
-      - name: Run Build in Container
+      - name: Run Build in Java Container
+        if: matrix.language == 'java'
         run: |
           docker run --rm \
             --entrypoint "" \
@@ -99,27 +105,16 @@ jobs:
             mvn clean package -U -DskipTests
 
       - name: Upload Java Artifact
+        if: matrix.language == 'java'
         uses: actions/upload-artifact@v4
         with:
           name: java-artifact
           path: target/*.jar
           retention-days: 1
 
-  build-python:
-    needs: detect
-    if: needs.detect.outputs.language == 'python'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Login to Artifactory
-        run: |
-          echo "${{ secrets.JFROG_PASSWORD }}" | docker login trial2zs76n.jfrog.io \
-            -u "${{ secrets.JFROG_USERNAME }}" \
-            --password-stdin
-
+      # PYTHON BUILD STEPS
       - name: Create Authenticated pip.conf
+        if: matrix.language == 'python'
         run: |
           mkdir -p .github/pip
           cat << EOF > .github/pip/pip.conf
@@ -127,7 +122,8 @@ jobs:
           index-url=https://${{ secrets.JFROG_USERNAME }}:${{ secrets.JFROG_PASSWORD }}@trial2zs76n.jfrog.io/artifactory/api/pypi/pypi/simple
           EOF
 
-      - name: Run Build in Container
+      - name: Run Build in Python Container
+        if: matrix.language == 'python'
         run: |
           docker run --rm \
             --entrypoint "" \
@@ -138,27 +134,16 @@ jobs:
             bash -c "if [ -f requirements.txt ]; then pip install --root-user-action=ignore -r requirements.txt; fi && python -m build"
 
       - name: Upload Python Artifact
+        if: matrix.language == 'python'
         uses: actions/upload-artifact@v4
         with:
           name: python-artifact
           path: dist/
           retention-days: 1
 
-  build-go:
-    needs: detect
-    if: needs.detect.outputs.language == 'go'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Login to Artifactory
-        run: |
-          echo "${{ secrets.JFROG_PASSWORD }}" | docker login trial2zs76n.jfrog.io \
-            -u "${{ secrets.JFROG_USERNAME }}" \
-            --password-stdin
-
-      - name: Run Build in Container
+      # GO BUILD STEPS
+      - name: Run Build in Go Container
+        if: matrix.language == 'go'
         run: |
           docker run --rm \
             --entrypoint "" \
@@ -169,20 +154,59 @@ jobs:
             bash -c "go mod download && mkdir -p dist && go build -o dist/app ."
 
       - name: Upload Go Artifact
+        if: matrix.language == 'go'
         uses: actions/upload-artifact@v4
         with:
           name: go-artifact
           path: dist/app
           retention-days: 1
 
+      # DOTNET BUILD STEPS
+      - name: Create Authenticated nuget.config
+        if: matrix.language == 'dotnet'
+        run: |
+          mkdir -p .github/nuget
+          cat << EOF > .github/nuget/nuget.config
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="Artifactory" value="https://trial2zs76n.jfrog.io/artifactory/api/nuget/v3/nuget/index.json" />
+            </packageSources>
+            <packageSourceCredentials>
+              <Artifactory>
+                <add key="Username" value="${{ secrets.JFROG_USERNAME }}" />
+                <add key="ClearTextPassword" value="${{ secrets.JFROG_PASSWORD }}" />
+              </Artifactory>
+            </packageSourceCredentials>
+          </configuration>
+          EOF
+
+      - name: Run Build in Dotnet Container
+        if: matrix.language == 'dotnet'
+        run: |
+          docker run --rm \
+            --entrypoint "" \
+            -v ${{ github.workspace }}:/workspace \
+            -v ${{ github.workspace }}/.github/nuget/nuget.config:/root/.nuget/NuGet/NuGet.Config \
+            -w /workspace \
+            trial2zs76n.jfrog.io/docker-local/dotnet-builder:1.0 \
+            dotnet build -c Release -o dist
+
+      - name: Upload Dotnet Artifact
+        if: matrix.language == 'dotnet'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-artifact
+          path: dist/
+          retention-days: 1
+
   security-scan:
-    needs: [detect, build-java, build-python, build-go]
+    needs: [detect, build]
     if: |
       always() &&
       needs.detect.result == 'success' &&
-      ((needs.detect.outputs.language == 'java' && needs.build-java.result == 'success') ||
-       (needs.detect.outputs.language == 'python' && needs.build-python.result == 'success') ||
-       (needs.detect.outputs.language == 'go' && needs.build-go.result == 'success'))
+      needs.build.result == 'success'
     uses: ./.github/workflows/security.yml
     with:
       fail_on_severity: 'high'

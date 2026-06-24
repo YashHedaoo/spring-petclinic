@@ -277,7 +277,7 @@ jobs:
       - name: Login to Docker Hub
         run: |
           echo "=== Authenticating with Docker Hub ==="
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
           echo "[SUCCESS] Authenticated successfully with Docker Hub."
 
       - name: Generate Dockerfile and Build Image

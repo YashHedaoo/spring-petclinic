@@ -101,16 +101,8 @@ jobs:
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
         run: |
-          if [ -z "$GITGUARDIAN_API_KEY" ]; then
-            echo "Warning: GITGUARDIAN_API_KEY secret is not set. Skipping GitGuardian scan."
-            echo "{}" > gitguardian.json
-          else
-            pip install --root-user-action=ignore ggshield
-            if ! ggshield secret scan ci --json > gitguardian.json; then
-              echo "Warning: GitGuardian scan failed. Check if the API key is valid. Using empty results fallback."
-              echo "{}" > gitguardian.json
-            fi
-          fi
+          pip install --root-user-action=ignore ggshield
+          ggshield secret scan ci --json > gitguardian.json || true
 
       - name: Resolve and Execute Parsing Script
         env:

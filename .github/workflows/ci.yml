@@ -280,18 +280,6 @@ jobs:
     secrets:
       CMDB_API_KEY: ${{ secrets.CMDB_API_KEY }}
 
-  publish:
-    needs: [detect, security-gatekeeper]
-    if: |
-      always() &&
-      needs.detect.result == 'success' &&
-      needs.security-gatekeeper.result == 'success' &&
-      startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/publish.yml
-    with:
-      language: ${{ needs.detect.outputs.language }}
-    secrets: inherit
-
   docker-delivery:
     needs: [detect, build, security-gatekeeper]
     if: |

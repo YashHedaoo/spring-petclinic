@@ -253,11 +253,10 @@ jobs:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
   security-secrets:
-    needs: [detect, build]
+    needs: [detect]
     if: |
       always() &&
-      needs.detect.result == 'success' &&
-      needs.build.result == 'success'
+      needs.detect.result == 'success'
     uses: ./.github/workflows/secrets-scan.yml
     secrets:
       GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}

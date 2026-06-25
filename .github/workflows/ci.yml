@@ -30,8 +30,21 @@ jobs:
           echo "=== Launching Project Type Auto-Detection ==="
           bash scripts/detect.sh
 
+  security-secrets:
+    needs: [detect]
+    if: |
+      always() &&
+      needs.detect.result == 'success'
+    uses: ./.github/workflows/secrets-scan.yml
+    secrets:
+      GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+
   build:
-    needs: detect
+    needs: [detect, security-secrets]
+    if: |
+      always() &&
+      needs.detect.result == 'success' &&
+      needs.security-secrets.result == 'success'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -251,15 +264,6 @@ jobs:
     uses: ./.github/workflows/sast-scan.yml
     secrets:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-  security-secrets:
-    needs: [detect]
-    if: |
-      always() &&
-      needs.detect.result == 'success'
-    uses: ./.github/workflows/secrets-scan.yml
-    secrets:
-      GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
 
   security-gatekeeper:
     needs: [detect, security-sca, security-sast, security-secrets]

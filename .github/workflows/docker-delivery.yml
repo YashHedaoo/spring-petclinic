@@ -30,12 +30,24 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             # Release tag
             VERSION="${REF_NAME}"
-            TAGS="${IMAGE_NAME}:${VERSION},${IMAGE_NAME}:latest"
-            PRIMARY_TAG="${IMAGE_NAME}:${VERSION}"
+            TAGS="${IMAGE_NAME}:${VERSION},${IMAGE_NAME}:${VERSION}-${SHA_SHORT}"
+            PRIMARY_TAG="${IMAGE_NAME}:${VERSION}-${SHA_SHORT}"
           elif [[ "${{ github.ref }}" == refs/heads/main ]]; then
-            # Main branch
-            TAGS="${IMAGE_NAME}:latest,${IMAGE_NAME}:sha-${SHA_SHORT}"
-            PRIMARY_TAG="${IMAGE_NAME}:sha-${SHA_SHORT}"
+            # Main branch (Production)
+            TAGS="${IMAGE_NAME}:latest,${IMAGE_NAME}:production,${IMAGE_NAME}:production-${SHA_SHORT}"
+            PRIMARY_TAG="${IMAGE_NAME}:production-${SHA_SHORT}"
+          elif [[ "${{ github.ref }}" == refs/heads/dev ]]; then
+            # Dev branch
+            TAGS="${IMAGE_NAME}:dev,${IMAGE_NAME}:dev-${SHA_SHORT}"
+            PRIMARY_TAG="${IMAGE_NAME}:dev-${SHA_SHORT}"
+          elif [[ "${{ github.ref }}" == refs/heads/test ]]; then
+            # Test branch
+            TAGS="${IMAGE_NAME}:test,${IMAGE_NAME}:test-${SHA_SHORT}"
+            PRIMARY_TAG="${IMAGE_NAME}:test-${SHA_SHORT}"
+          elif [[ "${{ github.ref }}" == refs/heads/stage ]]; then
+            # Stage branch
+            TAGS="${IMAGE_NAME}:stage,${IMAGE_NAME}:stage-${SHA_SHORT}"
+            PRIMARY_TAG="${IMAGE_NAME}:stage-${SHA_SHORT}"
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             # Pull Request
             PR_NUM="${{ github.event.number }}"
@@ -43,8 +55,8 @@ jobs:
             PRIMARY_TAG="${IMAGE_NAME}:pr-${PR_NUM}"
           else
             # Other branch
-            TAGS="${IMAGE_NAME}:branch-${REF_CLEAN}"
-            PRIMARY_TAG="${IMAGE_NAME}:branch-${REF_CLEAN}"
+            TAGS="${IMAGE_NAME}:${REF_CLEAN},${IMAGE_NAME}:${REF_CLEAN}-${SHA_SHORT}"
+            PRIMARY_TAG="${IMAGE_NAME}:${REF_CLEAN}-${SHA_SHORT}"
           fi
           
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT

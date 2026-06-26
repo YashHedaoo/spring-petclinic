@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+      - dev
+      - test
+      - stage
       - feature/*
       - bugfix/*
       - hotfix/*
